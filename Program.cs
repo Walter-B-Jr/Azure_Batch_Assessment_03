@@ -22,16 +22,16 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         // These are used when constructing connection strings for the Batch and Storage client objects.
 
         // Batch account credentials
-        private const string BatchAccountName = "waltsbatchtestvnet";
-        private const string BatchAccountKey = "8Y/932u5JMch/8mxGBU4MnmX0YoFdCbevNHREQlllSsmqCKerqHgQrfqqfO6FXJvD+lfsk0XK4hSJupYLzLTkQ==";
-        private const string BatchAccountUrl = "https://waltsbatchtestvnet.westus2.batch.azure.com";
+        private const string BatchAccountName = "";
+        private const string BatchAccountKey = "";
+        private const string BatchAccountUrl = "";
 
         // Storage account credentials
-        private const string StorageAccountName = "batchstoragetester";
-        private const string StorageAccountKey = "yyCjwGoM4KmeLa5XfN+PpPOnx/es8ZAlknyCwgGg7PfVmTyQyRYu7vtM3cCRNztag/IJ2WCn7gk/7VqMxbTm4A==";
+        private const string StorageAccountName = "";
+        private const string StorageAccountKey = "";
 
         private const string PoolId = "batch_assessment_03_pool";
-        private const string JobId = "batch_assessment_03b_job";
+        private const string JobId = "batch_assessment_03_job";
 
         public static void Main(string[] args)
         {
@@ -307,7 +307,7 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
                 pool.AutoScaleFormula = "$samples = $ActiveTasks.GetSamplePercent(TimeInterval_Minute * 1); " +
                     "$tasks = $samples < 70 ? max(0,$ActiveTasks.GetSample(1)) : max( $ActiveTasks.GetSample(1), avg($ActiveTasks.GetSample(TimeInterval_Minute * 3))); " + 
                     "$targetVMs = $tasks > 0 ? $tasks: max(0, $TargetDedicatedNodes / 2); " +
-                    "$TargetDedicatedNodes = max(0, min($targetVMs, 5)); " +
+                    "$TargetDedicatedNodes = max(0, min($targetVMs, 10)); " +
                     "$NodeDeallocationOption = taskcompletion;";
                 pool.MaxTasksPerComputeNode = 4;
                 pool.AutoScaleEnabled = true;
