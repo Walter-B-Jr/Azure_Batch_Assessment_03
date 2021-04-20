@@ -295,13 +295,21 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
             {
                 Console.WriteLine("Creating pool [{0}]...", poolId);
 
+                ImageReference imageReference = new ImageReference(
+                    publisher: "MicrosoftWindowsServer",
+                    offer: "WindowsServer",
+                    sku: "2019-Datacenter",
+                    version: "latest"); 
+                
                 // Create the unbound pool. Until we call CloudPool.Commit() or CommitAsync(), no pool is actually created in the
                 // Batch service. This CloudPool instance is therefore considered "unbound," and we can modify its properties.
                 pool = batchClient.PoolOperations.CreatePool(
                     poolId: poolId,
                     //targetLowPriorityComputeNodes: 1,                                             // AutoScaling, do not set target node count
-                    virtualMachineSize: "small",                                                // single-core, 1.75 GB memory, 225 GB disk
-                    cloudServiceConfiguration: new CloudServiceConfiguration(osFamily: "5"));   // Windows Server 2016
+                    virtualMachineSize: "Standard_D1_v2",                                           // single-core, 3.5 GB memory
+                    virtualMachineConfiguration: new VirtualMachineConfiguration(
+                        imageReference: imageReference, 
+                        nodeAgentSkuId: "batch.node.windows amd64"));
 
                 //Setting my autoscale formula to scale based on the number of task scheduled to run...
                 pool.AutoScaleFormula = "$samples = $ActiveTasks.GetSamplePercent(TimeInterval_Minute * 1); " +
