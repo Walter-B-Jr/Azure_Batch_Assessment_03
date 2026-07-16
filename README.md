@@ -35,7 +35,6 @@ This lab creates the following resources.
 -	Resource Group
 -	Batch account
 -	Storage Account
--	App Service application (which contains Batch and Storage account credentials)
 ## Scenario
 In this lab, you will run the Batch Job. You will notice that the pool will scale to 10 nodes. What we desire is that the autoscale formula takes into account the �MaxTaskPerComputeNode� as well. So the current pool is configured to have each node handle 4 task. Modify the autoscale formula to account for the �MaxTaskPerComputeNode� value. The desired outcome is to have a total of 3 nodes running. (4 tasks running on each node).
 ## Your Goal
