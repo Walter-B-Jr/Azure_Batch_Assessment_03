@@ -4,24 +4,24 @@
 This is a Level 200 lab for Autoscale in Azure Batch Service.
 ## Deployment Instructions
 
-Deploy the ARM template **`azuredeploy.json`** (in the root of this repo) using **either** option below.
+Deploy the ARM template **`azuredeploy.json`** (in the root of this repo) using any option below.
 
-### Option 1 - Azure CLI (recommended)
+### Option 1 - Deploy to Azure (one-click)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FWalter-B-Jr%2FAzure_Batch_Assessment_03%2Fmaster%2Fazuredeploy.json)
+
+Click the button, pick (or create) a resource group + region, set `namePrefix`, then **Review + create** -> **Create**.
+
+### Option 2 - Azure CLI
 ```powershell
 az group create -n rg-batch-lab-03 -l westus2
 az deployment group create -g rg-batch-lab-03 --template-file azuredeploy.json --parameters namePrefix=batlab03
 az deployment group show -g rg-batch-lab-03 -n azuredeploy --query properties.outputs
 ```
 
-### Option 2 - Azure Portal (Load file)
+### Option 3 - Azure Portal (Load file)
 1. Portal -> search **Deploy a custom template** -> **Build your own template in the editor**.
 2. **Load file** -> select `azuredeploy.json` from this repo -> **Save**.
 3. Choose/create a resource group + region, set `namePrefix`, then **Review + create** -> **Create**.
-
-### Option 3 - Deploy to Azure button
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2FWalter-B-Jr%2FAzure_Batch_Assessment_03%40master%2Fazuredeploy.json)
-
-> Note: the one-click button fetches the template from a public CDN. Some corporate networks block that outbound fetch (the portal then shows a generic "enable CORS" error) - use Option 1 or 2 instead.
 
 ### After deploying
 Open the deployment **Outputs** for `batchAccountName`, `batchAccountUrl`, and `storageAccountName`, then get the keys from the portal:
