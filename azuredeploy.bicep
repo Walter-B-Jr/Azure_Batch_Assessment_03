@@ -1,7 +1,5 @@
-// Standard Batch + Storage environment for the code-failure labs (_01, _03, _04).
-// These labs' intentional failures live in the SAMPLE CODE, not in infrastructure,
-// so this template deploys a plain, fully public Batch account + Storage account.
-// Author/grader use only. Do NOT commit to the engineer-facing repos.
+// Deploys the Azure Batch environment for this lab: a Batch account with a linked
+// Storage account used for application, input, and output data.
 
 @description('Prefix for generated resource names.')
 param namePrefix string = 'batlab'
@@ -9,9 +7,13 @@ param namePrefix string = 'batlab'
 @description('Azure region for all resources.')
 param location string = resourceGroup().location
 
+@description('Object ID of the principal that runs the sample app and needs blob data access. Defaults to the deploying user.')
+param appPrincipalId string = deployer().objectId
+
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = toLower('${namePrefix}${suffix}')
 var batchAccountName = toLower('${namePrefix}ba${suffix}')
+var storageBlobDataContributor = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: length(storageAccountName) > 24 ? substring(storageAccountName, 0, 24) : storageAccountName
@@ -35,8 +37,16 @@ resource batch 'Microsoft.Batch/batchAccounts@2024-07-01' = {
       storageAccountId: storage.id
     }
     poolAllocationMode: 'BatchService'
-    // Fully public data-plane and node-management: nothing here causes a failure.
     publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource blobDataRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storage.id, appPrincipalId, storageBlobDataContributor)
+  scope: storage
+  properties: {
+    roleDefinitionId: storageBlobDataContributor
+    principalId: appPrincipalId
   }
 }
 

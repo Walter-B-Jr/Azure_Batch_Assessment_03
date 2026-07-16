@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Corporation
+// Copyright (c) Microsoft Corporation
 //
 // Companion project to the following article:
 // https://azure.microsoft.com/documentation/articles/batch-dotnet-get-started/
@@ -13,8 +13,11 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
     using Microsoft.Azure.Batch;
     using Microsoft.Azure.Batch.Auth;
     using Microsoft.Azure.Batch.Common;
-    using Microsoft.WindowsAzure.Storage;
-    using Microsoft.WindowsAzure.Storage.Blob;
+    using global::Azure;
+    using global::Azure.Identity;
+    using global::Azure.Storage.Blobs;
+    using global::Azure.Storage.Blobs.Models;
+    using global::Azure.Storage.Sas;
 
     public class Program
     {
@@ -26,9 +29,8 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         private const string BatchAccountKey = "";
         private const string BatchAccountUrl = "";
 
-        // Storage account credentials
+        // Storage account name. Data-plane access uses Entra ID (DefaultAzureCredential); no account key required.
         private const string StorageAccountName = "";
-        private const string StorageAccountKey = "";
 
         private const string PoolId = "batch_assessment_03_pool";
         private const string JobId = "batch_assessment_03_job";
@@ -36,7 +38,7 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         public static void Main(string[] args)
         {
             if (String.IsNullOrEmpty(BatchAccountName) || String.IsNullOrEmpty(BatchAccountKey) || String.IsNullOrEmpty(BatchAccountUrl) ||
-                String.IsNullOrEmpty(StorageAccountName) || String.IsNullOrEmpty(StorageAccountKey))
+                String.IsNullOrEmpty(StorageAccountName))
             {
                 throw new InvalidOperationException("One ore more account credential strings have not been populated. Please ensure that your Batch and Storage account credentials have been specified.");
             }
@@ -74,23 +76,23 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
             Stopwatch timer = new Stopwatch();
             timer.Start();
 
-            // Construct the Storage account connection string
-            string storageConnectionString = String.Format("DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1}",
-                                                            StorageAccountName, StorageAccountKey);
+            // Create the blob service client using Entra ID (no storage account keys required).
+            // DefaultAzureCredential resolves the identity from Azure CLI, Visual Studio, environment variables, or managed identity.
+            BlobServiceClient blobServiceClient = new BlobServiceClient(
+                new Uri(String.Format("https://{0}.blob.core.windows.net", StorageAccountName)),
+                new DefaultAzureCredential());
 
-            // Retrieve the storage account
-            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConnectionString);
-
-            // Create the blob client, for use in obtaining references to blob storage containers
-            CloudBlobClient blobClient = storageAccount.CreateCloudBlobClient();
+            // Obtain a user delegation key (signed via Entra ID) used to mint short-lived SAS URLs for the resource files.
+            UserDelegationKey userDelegationKey = (await blobServiceClient.GetUserDelegationKeyAsync(
+                DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(2))).Value;
 
             // Use the blob client to create the containers in Azure Storage if they don't yet exist
             const string appContainerName = "application";
             const string inputContainerName = "input";
             const string outputContainerName = "output";
-            await CreateContainerIfNotExistAsync(blobClient, appContainerName);
-            await CreateContainerIfNotExistAsync(blobClient, inputContainerName);
-            await CreateContainerIfNotExistAsync(blobClient, outputContainerName);
+            await CreateContainerIfNotExistAsync(blobServiceClient, appContainerName);
+            await CreateContainerIfNotExistAsync(blobServiceClient, inputContainerName);
+            await CreateContainerIfNotExistAsync(blobServiceClient, outputContainerName);
 
             // Paths to the executable and its dependencies that will be executed by the tasks
             List<string> applicationFilePaths = new List<string>
@@ -118,15 +120,15 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
 
             // Upload the application and its dependencies to Azure Storage. This is the application that will
             // process the data files, and will be executed by each of the tasks on the compute nodes.
-            List<ResourceFile> applicationFiles = await UploadFilesToContainerAsync(blobClient, appContainerName, applicationFilePaths);
+            List<ResourceFile> applicationFiles = await UploadFilesToContainerAsync(blobServiceClient, userDelegationKey, appContainerName, applicationFilePaths);
 
             // Upload the data files. This is the data that will be processed by each of the tasks that are
             // executed on the compute nodes within the pool.
-            List<ResourceFile> inputFiles = await UploadFilesToContainerAsync(blobClient, inputContainerName, inputFilePaths);
+            List<ResourceFile> inputFiles = await UploadFilesToContainerAsync(blobServiceClient, userDelegationKey, inputContainerName, inputFilePaths);
 
             // Obtain a shared access signature that provides write access to the output container to which
             // the tasks will upload their output.
-            string outputContainerSasUrl = GetContainerSasUrl(blobClient, outputContainerName, SharedAccessBlobPermissions.Write);
+            string outputContainerSasUrl = GetContainerSasUrl(blobServiceClient, userDelegationKey, outputContainerName);
 
             // Create a BatchClient. We'll now be interacting with the Batch service in addition to Storage
             BatchSharedKeyCredentials cred = new BatchSharedKeyCredentials(BatchAccountUrl, BatchAccountName, BatchAccountKey);
@@ -148,12 +150,12 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
                 await MonitorTasks(batchClient, JobId, TimeSpan.FromMinutes(30));
 
                 // Download the task output files from the output Storage container to a local directory
-                await DownloadBlobsFromContainerAsync(blobClient, outputContainerName, Environment.GetEnvironmentVariable("TEMP"));
+                await DownloadBlobsFromContainerAsync(blobServiceClient, outputContainerName, Environment.GetEnvironmentVariable("TEMP"));
 
                 // Clean up Storage resources
-                await DeleteContainerAsync(blobClient, appContainerName);
-                await DeleteContainerAsync(blobClient, inputContainerName);
-                await DeleteContainerAsync(blobClient, outputContainerName);
+                await DeleteContainerAsync(blobServiceClient, appContainerName);
+                await DeleteContainerAsync(blobServiceClient, inputContainerName);
+                await DeleteContainerAsync(blobServiceClient, outputContainerName);
 
                 // Print out some timing info
                 timer.Stop();
@@ -185,11 +187,12 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         /// <param name="blobClient">A <see cref="Microsoft.WindowsAzure.Storage.Blob.CloudBlobClient"/>.</param>
         /// <param name="containerName">The name for the new container.</param>
         /// <returns>A <see cref="System.Threading.Tasks.Task"/> object that represents the asynchronous operation.</returns>
-        private static async Task CreateContainerIfNotExistAsync(CloudBlobClient blobClient, string containerName)
+        private static async Task CreateContainerIfNotExistAsync(BlobServiceClient blobServiceClient, string containerName)
         {
-            CloudBlobContainer container = blobClient.GetContainerReference(containerName);
+            BlobContainerClient container = blobServiceClient.GetBlobContainerClient(containerName);
 
-            if (await container.CreateIfNotExistsAsync())
+            Response<BlobContainerInfo> response = await container.CreateIfNotExistsAsync();
+            if (response != null)
             {
                 Console.WriteLine("Container [{0}] created.", containerName);
             }
@@ -208,22 +211,26 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         /// <returns>A SAS URL providing the specified access to the container.</returns>
         /// <remarks>The SAS URL provided is valid for 2 hours from the time this method is called. The container must
         /// already exist within Azure Storage.</remarks>
-        private static string GetContainerSasUrl(CloudBlobClient blobClient, string containerName, SharedAccessBlobPermissions permissions)
+        private static string GetContainerSasUrl(BlobServiceClient blobServiceClient, UserDelegationKey userDelegationKey, string containerName)
         {
-            // Set the expiry time and permissions for the container access signature. In this case, no start time is specified,
-            // so the shared access signature becomes valid immediately
-            SharedAccessBlobPolicy sasConstraints = new SharedAccessBlobPolicy
+            BlobContainerClient container = blobServiceClient.GetBlobContainerClient(containerName);
+
+            // Build a user-delegation (Entra ID signed) SAS granting write access to the container.
+            BlobSasBuilder sasBuilder = new BlobSasBuilder
             {
-                SharedAccessExpiryTime = DateTime.UtcNow.AddHours(2),
-                Permissions = permissions
+                BlobContainerName = containerName,
+                Resource = "c",
+                StartsOn = DateTimeOffset.UtcNow.AddMinutes(-5),
+                ExpiresOn = DateTimeOffset.UtcNow.AddHours(2)
+            };
+            sasBuilder.SetPermissions(BlobContainerSasPermissions.Create | BlobContainerSasPermissions.Write | BlobContainerSasPermissions.List);
+
+            BlobUriBuilder uriBuilder = new BlobUriBuilder(container.Uri)
+            {
+                Sas = sasBuilder.ToSasQueryParameters(userDelegationKey, StorageAccountName)
             };
 
-            // Generate the shared access signature on the container, setting the constraints directly on the signature
-            CloudBlobContainer container = blobClient.GetContainerReference(containerName);
-            string sasContainerToken = container.GetSharedAccessSignature(sasConstraints);
-
-            // Return the URL string for the container, including the SAS token
-            return String.Format("{0}{1}", container.Uri, sasContainerToken);
+            return uriBuilder.ToUri().ToString();
         }
 
         /// <summary>
@@ -235,13 +242,13 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         /// <param name="inputContainerName">The name of the blob storage container to which the files should be uploaded.</param>
         /// <param name="filePaths">A collection of paths of the files to be uploaded to the container.</param>
         /// <returns>A collection of <see cref="ResourceFile"/> objects.</returns>
-        private static async Task<List<ResourceFile>> UploadFilesToContainerAsync(CloudBlobClient blobClient, string inputContainerName, List<string> filePaths)
+        private static async Task<List<ResourceFile>> UploadFilesToContainerAsync(BlobServiceClient blobServiceClient, UserDelegationKey userDelegationKey, string inputContainerName, List<string> filePaths)
         {
             List<ResourceFile> resourceFiles = new List<ResourceFile>();
 
             foreach (string filePath in filePaths)
             {
-                resourceFiles.Add(await UploadFileToContainerAsync(blobClient, inputContainerName, filePath));
+                resourceFiles.Add(await UploadFileToContainerAsync(blobServiceClient, userDelegationKey, inputContainerName, filePath));
             }
 
             return resourceFiles;
@@ -254,27 +261,35 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         /// <param name="blobClient">A <see cref="Microsoft.WindowsAzure.Storage.Blob.CloudBlobClient"/>.</param>
         /// <param name="containerName">The name of the blob storage container to which the file should be uploaded.</param>
         /// <returns>A <see cref="Microsoft.Azure.Batch.ResourceFile"/> instance representing the file within blob storage.</returns>
-        private static async Task<ResourceFile> UploadFileToContainerAsync(CloudBlobClient blobClient, string containerName, string filePath)
+        private static async Task<ResourceFile> UploadFileToContainerAsync(BlobServiceClient blobServiceClient, UserDelegationKey userDelegationKey, string containerName, string filePath)
         {
             Console.WriteLine("Uploading file {0} to container [{1}]...", filePath, containerName);
 
             string blobName = Path.GetFileName(filePath);
 
-            CloudBlobContainer container = blobClient.GetContainerReference(containerName);
-            CloudBlockBlob blobData = container.GetBlockBlobReference(blobName);
-            await blobData.UploadFromFileAsync(filePath);
-
-            // Set the expiry time and permissions for the blob shared access signature. In this case, no start time is specified,
-            // so the shared access signature becomes valid immediately
-            SharedAccessBlobPolicy sasConstraints = new SharedAccessBlobPolicy
+            BlobContainerClient container = blobServiceClient.GetBlobContainerClient(containerName);
+            BlobClient blobData = container.GetBlobClient(blobName);
+            using (FileStream stream = File.OpenRead(filePath))
             {
-                SharedAccessExpiryTime = DateTime.UtcNow.AddHours(2),
-                Permissions = SharedAccessBlobPermissions.Read
-            };
+                await blobData.UploadAsync(stream, overwrite: true);
+            }
 
-            // Construct the SAS URL for blob
-            string sasBlobToken = blobData.GetSharedAccessSignature(sasConstraints);
-            string blobSasUri = String.Format("{0}{1}", blobData.Uri, sasBlobToken);
+            // Build a user-delegation (Entra ID signed) SAS granting read access to the blob, valid for 2 hours.
+            BlobSasBuilder sasBuilder = new BlobSasBuilder
+            {
+                BlobContainerName = containerName,
+                BlobName = blobName,
+                Resource = "b",
+                StartsOn = DateTimeOffset.UtcNow.AddMinutes(-5),
+                ExpiresOn = DateTimeOffset.UtcNow.AddHours(2)
+            };
+            sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+            BlobUriBuilder uriBuilder = new BlobUriBuilder(blobData.Uri)
+            {
+                Sas = sasBuilder.ToSasQueryParameters(userDelegationKey, StorageAccountName)
+            };
+            string blobSasUri = uriBuilder.ToUri().ToString();
 
             return new ResourceFile(blobSasUri, blobName);
         }
@@ -496,22 +511,20 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         /// <param name="containerName">The name of the blob storage container containing the files to download.</param>
         /// <param name="directoryPath">The full path of the local directory to which the files should be downloaded.</param>
         /// <returns>A <see cref="System.Threading.Tasks.Task"/> object that represents the asynchronous operation.</returns>
-        private static async Task DownloadBlobsFromContainerAsync(CloudBlobClient blobClient, string containerName, string directoryPath)
+        private static async Task DownloadBlobsFromContainerAsync(BlobServiceClient blobServiceClient, string containerName, string directoryPath)
         {
             Console.WriteLine("Downloading all files from container [{0}]...", containerName);
 
-            // Retrieve a reference to a previously created container
-            CloudBlobContainer container = blobClient.GetContainerReference(containerName);
+            BlobContainerClient container = blobServiceClient.GetBlobContainerClient(containerName);
 
-            // Get a flat listing of all the block blobs in the specified container
-            foreach (IListBlobItem item in container.ListBlobs(prefix: null, useFlatBlobListing: true))
+            foreach (BlobItem item in container.GetBlobs())
             {
-                // Retrieve reference to the current blob
-                CloudBlob blob = (CloudBlob)item;
-
-                // Save blob contents to a file in the specified folder
-                string localOutputFile = Path.Combine(directoryPath, blob.Name);
-                await blob.DownloadToFileAsync(localOutputFile, FileMode.Create);
+                BlobClient blob = container.GetBlobClient(item.Name);
+                string localOutputFile = Path.Combine(directoryPath, item.Name);
+                using (FileStream stream = File.Create(localOutputFile))
+                {
+                    await blob.DownloadToAsync(stream);
+                }
             }
 
             Console.WriteLine("All files downloaded to {0}", directoryPath);
@@ -523,9 +536,9 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         /// <param name="blobClient">A <see cref="Microsoft.WindowsAzure.Storage.Blob.CloudBlobClient"/>.</param>
         /// <param name="containerName">The name of the container to delete.</param>
         /// <returns>A <see cref="System.Threading.Tasks.Task"/> object that represents the asynchronous operation.</returns>
-        private static async Task DeleteContainerAsync(CloudBlobClient blobClient, string containerName)
+        private static async Task DeleteContainerAsync(BlobServiceClient blobServiceClient, string containerName)
         {
-            CloudBlobContainer container = blobClient.GetContainerReference(containerName);
+            BlobContainerClient container = blobServiceClient.GetBlobContainerClient(containerName);
 
             if (await container.DeleteIfExistsAsync())
             {

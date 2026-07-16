@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "4990040554814888294"
+      "templateHash": "3244574256417516588"
     }
   },
   "parameters": {
@@ -22,12 +22,20 @@
       "metadata": {
         "description": "Azure region for all resources."
       }
+    },
+    "appPrincipalId": {
+      "type": "string",
+      "defaultValue": "[deployer().objectId]",
+      "metadata": {
+        "description": "Object ID of the principal that runs the sample app and needs blob data access. Defaults to the deploying user."
+      }
     }
   },
   "variables": {
     "suffix": "[uniqueString(resourceGroup().id)]",
     "storageAccountName": "[toLower(format('{0}{1}', parameters('namePrefix'), variables('suffix')))]",
-    "batchAccountName": "[toLower(format('{0}ba{1}', parameters('namePrefix'), variables('suffix')))]"
+    "batchAccountName": "[toLower(format('{0}ba{1}', parameters('namePrefix'), variables('suffix')))]",
+    "storageBlobDataContributor": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]"
   },
   "resources": [
     {
@@ -56,6 +64,19 @@
         },
         "poolAllocationMode": "BatchService",
         "publicNetworkAccess": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName')))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName'))), parameters('appPrincipalId'), variables('storageBlobDataContributor'))]",
+      "properties": {
+        "roleDefinitionId": "[variables('storageBlobDataContributor')]",
+        "principalId": "[parameters('appPrincipalId')]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName')))]"
