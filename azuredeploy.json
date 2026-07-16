@@ -1,0 +1,78 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.45.15.27210",
+      "templateHash": "11246634116886271593"
+    }
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "batlab",
+      "metadata": {
+        "description": "Prefix for generated resource names."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id)]",
+    "storageAccountName": "[toLower(format('{0}{1}', parameters('namePrefix'), variables('suffix')))]",
+    "batchAccountName": "[toLower(format('{0}ba{1}', parameters('namePrefix'), variables('suffix')))]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName'))]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false
+      }
+    },
+    {
+      "type": "Microsoft.Batch/batchAccounts",
+      "apiVersion": "2024-07-01",
+      "name": "[if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "autoStorage": {
+          "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName')))]"
+        },
+        "poolAllocationMode": "BatchService",
+        "publicNetworkAccess": "Enabled"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName')))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "batchAccountName": {
+      "type": "string",
+      "value": "[if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))]"
+    },
+    "batchAccountUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))), '2024-07-01').accountEndpoint)]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "value": "[if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName'))]"
+    }
+  }
+}
