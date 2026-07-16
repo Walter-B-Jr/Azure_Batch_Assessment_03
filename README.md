@@ -4,7 +4,7 @@
 This is a Level 200 lab for Autoscale in Azure Batch Service.
 ## Deployment Instructions
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FWalter-B-Jr%2FAzure_Batch_Assessment_03%2Fmaster%2Fazuredeploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fcdn.jsdelivr.net%2Fgh%2FWalter-B-Jr%2FAzure_Batch_Assessment_03%40master%2Fazuredeploy.json)
 
 Click **Deploy to Azure** above, choose (or create) a resource group and region, then **Review + create**. When the deployment completes, open its **Outputs** to get `batchAccountName`, `batchAccountUrl`, and `storageAccountName`.
 
