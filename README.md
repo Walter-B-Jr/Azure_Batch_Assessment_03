@@ -3,9 +3,37 @@
 ## Introduction
 This is a Level 200 lab for Autoscale in Azure Batch Service.
 ## Deployment Instructions
+
+Deploy the ARM template **`azuredeploy.json`** (in the root of this repo) using any option below.
+
+### Option 1 - Deploy to Azure (one-click)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FWalter-B-Jr%2FAzure_Batch_Assessment_03%2Fmaster%2Fazuredeploy.json)
+
+Click the button, pick (or create) a resource group + region, set `namePrefix`, then **Review + create** -> **Create**.
+
+### Option 2 - Azure CLI
+```powershell
+az group create -n rg-batch-lab-03 -l westus2
+az deployment group create -g rg-batch-lab-03 --template-file azuredeploy.json --parameters namePrefix=batlab03
+az deployment group show -g rg-batch-lab-03 -n azuredeploy --query properties.outputs
+```
+
+### Option 3 - Azure Portal (Load file)
+1. Portal -> search **Deploy a custom template** -> **Build your own template in the editor**.
+2. **Load file** -> select `azuredeploy.json` from this repo -> **Save**.
+3. Choose/create a resource group + region, set `namePrefix`, then **Review + create** -> **Create**.
+
+### After deploying
+Open the deployment **Outputs** for `batchAccountName`, `batchAccountUrl`, and `storageAccountName`, then get the keys from the portal:
+- Batch account -> **Keys** -> account **URL** + **Primary access key**.
+- Storage account -> **Access keys** -> account name + **key1**.
+
+Paste these into `DotNetTutorial\Program.cs` (`BatchAccountName`, `BatchAccountUrl`, `BatchAccountKey`, `StorageAccountName`, `StorageAccountKey`), then build and run the console app.
+
+<details><summary>Manual deployment (alternative)</summary>
 1.	Deploy the template and download the source code.
 2.	Open up the application that was created in the deployment template to get the credentials required for the sample code to work correctly. Then, proceed to open the code sample in VS and make the following required changes:
-a.	Open “Program.cs” under DotNetTutorial application. 
+a.	Open ï¿½Program.csï¿½ under DotNetTutorial application. 
 b.	Proceed to enter the credentials provided in the application to the code sample as shown below
 i.	BatchAccountName
 ii.	BatchAccountKey
@@ -15,17 +43,18 @@ v.	StorageAccountKey
 vi.	You can name your PoolID and JobID however you desire.
 
 
-This lab should take approximately 10 – 15 minutes to deploy to Azure.
+This lab should take approximately 10 ï¿½ 15 minutes to deploy to Azure.
+</details>
+
 ## Resources Created
 This lab creates the following resources.
 -	Resource Group
 -	Batch account
 -	Storage Account
--	App Service application (which contains Batch and Storage account credentials)
 ## Scenario
-In this lab, you will run the Batch Job. You will notice that the pool will scale to 10 nodes. What we desire is that the autoscale formula takes into account the “MaxTaskPerComputeNode” as well. So the current pool is configured to have each node handle 4 task. Modify the autoscale formula to account for the “MaxTaskPerComputeNode” value. The desired outcome is to have a total of 3 nodes running. (4 tasks running on each node).
+In this lab, you will run the Batch Job. You will notice that the pool will scale to 10 nodes. What we desire is that the autoscale formula takes into account the ï¿½MaxTaskPerComputeNodeï¿½ as well. So the current pool is configured to have each node handle 4 task. Modify the autoscale formula to account for the ï¿½MaxTaskPerComputeNodeï¿½ value. The desired outcome is to have a total of 3 nodes running. (4 tasks running on each node).
 ## Your Goal
-Your goal is to modify the Autoscale rule to take into account the “MaxTaskPerComputeNode” value. 
+Your goal is to modify the Autoscale rule to take into account the ï¿½MaxTaskPerComputeNodeï¿½ value. 
 ## Proof of Solution
 1.	Take a screenshot of the 10 nodes created when you run the Job the first time. 
  
